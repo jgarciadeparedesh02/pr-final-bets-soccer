@@ -1,23 +1,13 @@
 const db = require('./db');
 const path = require('path');
 
-const TEAMS = [
-    { name: 'Real Madrid', strength: 92 }, { name: 'FC Barcelona', strength: 90 },
-    { name: 'Atlético Madrid', strength: 88 }, { name: 'Real Sociedad', strength: 84 },
-    { name: 'Villarreal', strength: 82 }, { name: 'Real Betis', strength: 81 },
-    { name: 'Athletic Club', strength: 83 }, { name: 'Sevilla FC', strength: 80 },
-    { name: 'Osasuna', strength: 78 }, { name: 'Girona FC', strength: 85 },
-    { name: 'Rayo Vallecano', strength: 76 }, { name: 'Celta de Vigo', strength: 77 },
-    { name: 'Valencia CF', strength: 79 }, { name: 'Getafe CF', strength: 76 },
-    { name: 'RCD Mallorca', strength: 75 }, { name: 'UD Las Palmas', strength: 74 },
-    { name: 'Deportivo Alavés', strength: 73 }, { name: 'Granada CF', strength: 70 },
-    { name: 'Cádiz CF', strength: 71 }, { name: 'UD Almería', strength: 69 }
-];
+// TEAMS are now loaded from the database during initialization
 
 class SimulationEngine {
     constructor(dbPath) {
         this.io = null;
-        this.jornadaInterval = 13.26 * 60 * 60 * 1000; // 13.26 hours (~3 weeks for 38 jornadas)
+        this.duracionRealJornada = 10 * 60; //minutos 
+        this.jornadaInterval = this.duracionRealJornada * 60 * 1000;
         this.matchDuration = (this.jornadaInterval / 10) + (1 * 60 * 1000); // Back-to-back with 1min overlap
         this.isSaving = false;
         this.pendingSave = false;
@@ -87,7 +77,7 @@ class SimulationEngine {
                     league: m.league,
                     events: m.events
                 })),
-                teams: teamRes.rows.length > 0 ? teamRes.rows : TEAMS.map(t => ({ ...t, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, pts: 0 })),
+                teams: teamRes.rows,
                 simulationState: stateRes.rows[0]?.state || null,
                 players: playerRes.rows,
                 notifications: notifRes.rows.map(n => ({
@@ -114,7 +104,7 @@ class SimulationEngine {
             this.db = { users: [], bets: [], messages: [], matches: [], allMatches: [], notifications: [], simulationState: null };
             this.state = { currentJornada: 1, leagueStarted: false, lastJornadaStart: null, jornadas: [] };
             this.allMatches = [];
-            this.teams = TEAMS.map(t => ({ ...t, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, pts: 0 }));
+            this.teams = [];
             this.db.players = [];
         }
     }
@@ -171,7 +161,11 @@ class SimulationEngine {
     }
 
     async generateSchedule() {
-        const teams = [...TEAMS].map(t => t.name);
+        if (!this.teams || this.teams.length === 0) {
+            console.error("[Sim] No hay equipos cargados para generar el calendario");
+            return;
+        }
+        const teams = [...this.teams].map(t => t.name);
         const numTeams = teams.length;
         const numDays = numTeams - 1;
         const matchesPerDay = numTeams / 2;
@@ -347,6 +341,17 @@ class SimulationEngine {
             match.events.push(this.generateGoalEvent(match, 'away', true));
         }
         match.events.sort((a, b) => a.minute - b.minute);
+
+        // Corregir marcadores progresivos tras el sorteo de minutos
+        let tempHome = 0;
+        let tempAway = 0;
+        match.events.forEach(ev => {
+            if (ev.type === 'goal') {
+                if (ev.team === match.home) tempHome++;
+                else tempAway++;
+                ev.score = `${tempHome}-${tempAway}`;
+            }
+        });
 
         await this.finishMatch(match);
     }

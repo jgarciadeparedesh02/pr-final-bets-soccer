@@ -156,16 +156,29 @@
  *             type: object
  *             required: [username, email, password]
  *             properties:
- *               username: { type: string }
- *               email: { type: string }
- *               password: { type: string }
+ *               username: { type: string, minLength: 3, maxLength: 20 }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 4 }
  *     responses:
  *       200:
- *         description: Usuario registrado
+ *         description: Usuario registrado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string }
+ *                 user: { $ref: '#/components/schemas/User' }
+ *       400:
+ *         description: Datos de registro inválidos o email ya registrado
+ *       500:
+ *         description: Error interno del servidor
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/login:
  *   post:
- *     summary: Inicia sesion
+ *     summary: Inicia sesión
  *     tags: [Autenticacion]
  *     requestBody:
  *       required: true
@@ -175,23 +188,44 @@
  *             type: object
  *             required: [email, password]
  *             properties:
- *               email: { type: string }
+ *               email: { type: string, format: email }
  *               password: { type: string }
  *     responses:
  *       200:
  *         description: Login exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string }
+ *                 user: { $ref: '#/components/schemas/User' }
+ *       401:
+ *         description: Credenciales inválidas
+ *       500:
+ *         description: Error interno del servidor
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/matches:
  *   get:
- *     summary: Partidos de la jornada actual
+ *     summary: Obtiene los partidos de la jornada actual
  *     tags: [Partidos]
  *     responses:
  *       200:
- *         description: Lista de partidos
+ *         description: Lista de partidos de la jornada actual
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Match'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/matches/{id}:
  *   get:
- *     summary: Detalles de un partido
+ *     summary: Obtiene los detalles de un partido específico
  *     tags: [Partidos]
  *     parameters:
  *       - in: path
@@ -200,12 +234,22 @@
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Detalles del partido
+ *         description: Detalles del partido encontrados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Match'
+ *       404:
+ *         description: Partido no encontrado
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/bets:
  *   post:
- *     summary: Realiza una apuesta
+ *     summary: Realiza o actualiza una apuesta
  *     tags: [Apuestas]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -216,15 +260,31 @@
  *             properties:
  *               userId: { type: integer }
  *               matchId: { type: integer }
- *               homeScore: { type: integer }
- *               awayScore: { type: integer }
+ *               homeScore: { type: integer, minimum: 0 }
+ *               awayScore: { type: integer, minimum: 0 }
  *     responses:
  *       200:
- *         description: Apuesta guardada
+ *         description: Apuesta guardada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Bet'
+ *       400:
+ *         description: Datos de apuesta inválidos o partido ya iniciado
+ *       401:
+ *         description: No autorizado (Token faltante)
+ *       403:
+ *         description: Prohibido (Token inválido o el usuario no coincide con userId)
+ *       404:
+ *         description: Partido no encontrado
+ *       500:
+ *         description: Error al guardar la apuesta
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/bets/user/{userId}:
  *   get:
- *     summary: Apuestas de un usuario
+ *     summary: Obtiene todas las apuestas de un usuario específico
  *     tags: [Apuestas]
  *     parameters:
  *       - in: path
@@ -233,27 +293,51 @@
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Lista de apuestas
+ *         description: Lista de apuestas del usuario con datos del partido enriquecidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Bet'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/leaderboard:
  *   get:
- *     summary: Ranking global
+ *     summary: Ranking global de usuarios por puntos
  *     tags: [Social]
  *     responses:
  *       200:
- *         description: Ranking de usuarios
+ *         description: Lista de usuarios ordenada por puntuación
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/User'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/league/standings:
  *   get:
- *     summary: Clasificacion de la liga
+ *     summary: Obtiene la tabla de posiciones actual de la liga
  *     tags: [Liga]
  *     responses:
  *       200:
- *         description: Tabla de posiciones
+ *         description: Clasificación detallada de los equipos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Standing'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/league/results/{jornada}:
  *   get:
- *     summary: Resultados de una jornada
+ *     summary: Obtiene todos los partidos y resultados de una jornada específica
  *     tags: [Liga]
  *     parameters:
  *       - in: path
@@ -262,11 +346,19 @@
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Partidos de la jornada
+ *         description: Lista de partidos de la jornada solicitada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Match'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/teams/{teamName}/players:
  *   get:
- *     summary: Plantilla de un equipo
+ *     summary: Obtiene la lista de jugadores que pertenecen a un equipo
  *     tags: [Liga]
  *     parameters:
  *       - in: path
@@ -275,28 +367,56 @@
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Lista de jugadores
+ *         description: Lista de jugadores del equipo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Player'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/players/top-scorers:
  *   get:
- *     summary: Pichichi
+ *     summary: Obtiene los 10 máximos goleadores de la competición
  *     tags: [Liga]
  *     responses:
  *       200:
- *         description: Goleadores
+ *         description: Lista de los 10 jugadores con más goles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Player'
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/simulation/state:
  *   get:
- *     summary: Estado simulacion
+ *     summary: Obtiene el estado actual de la simulación de la liga
  *     tags: [Sistema]
  *     responses:
  *       200:
- *         description: Jornada actual
+ *         description: Información sobre la jornada actual y progreso de la liga
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 currentJornada: { type: integer }
+ *                 leagueStarted: { type: boolean }
+ *                 lastJornadaStart: { type: integer }
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/users/{id}:
  *   put:
- *     summary: Actualizar perfil
+ *     summary: Actualiza el perfil de un usuario (Nombre o Avatar)
  *     tags: [Usuario]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -308,15 +428,25 @@
  *           schema:
  *             type: object
  *             properties:
- *               username: { type: string }
+ *               username: { type: string, minLength: 3 }
  *               avatar: { type: string }
  *     responses:
  *       200:
- *         description: Perfil actualizado
+ *         description: Perfil actualizado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       401:
+ *         description: No autorizado
+ *       500:
+ *         description: Error al actualizar el perfil
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/messages/{matchId}:
  *   get:
- *     summary: Historial de mensajes
+ *     summary: Obtiene el historial de mensajes del chat de un partido
  *     tags: [Chat]
  *     parameters:
  *       - in: path
@@ -325,11 +455,21 @@
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Lista de mensajes
+ *         description: Lista de mensajes del partido
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/ChatMessage'
+ *       400:
+ *         description: ID de partido inválido
+ *       503:
+ *         description: Servicio inicializándose
  *
  * /api/messages:
  *   post:
- *     summary: Enviar mensaje
+ *     summary: Envía un nuevo mensaje al chat de un partido
  *     tags: [Chat]
  *     requestBody:
  *       required: true
@@ -344,5 +484,15 @@
  *               text: { type: string }
  *     responses:
  *       200:
- *         description: Mensaje enviado
+ *         description: Mensaje enviado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ChatMessage'
+ *       400:
+ *         description: Datos faltantes o inválidos
+ *       500:
+ *         description: Error al guardar el mensaje
+ *       503:
+ *         description: Servicio inicializándose
  */
